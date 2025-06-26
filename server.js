@@ -16,13 +16,15 @@ const server =http.createServer(async (req,res)=>{
 
     // Serve static files
     if (req.method === 'GET') {
-        if (req.url === '/') {
-        serveStaticFile(res, 'public/index.html', 'text/html');
-        } else if (req.url === '/style.css') {
-        serveStaticFile(res, 'public/style.css', 'text/css');
-        } else if (req.url === '/script.js') {
-        serveStaticFile(res, 'public/script.js', 'text/javascript');
-        }
+        const filePath = req.url === '/' ? 'public/index.html' : `public${req.url}`;
+        const ext = path.extname(filePath);
+        const contentType = {
+            '.html': 'text/html',
+            '.js': 'text/javascript',
+            '.css': 'text/css',
+        }[ext] || 'text/plain';
+
+        serveStaticFile(res, filePath, contentType);
     }
     else if (req.method === 'POST' && req.url === '/generate') {
         let body = '';
@@ -31,12 +33,22 @@ const server =http.createServer(async (req,res)=>{
         try {
             const data = JSON.parse(body);
             const prompt = formatPrompt(data);
-            
-            const response = await axios.post(
-            HF_API_URL,
-            { inputs: prompt },
-            { headers: { 'Authorization': `Bearer ${HF_API_KEY}` } }
-            );
+            try{
+                const response = await axios.post(
+                HF_API_URL,
+                { inputs: prompt },
+                { headers: { 'Authorization': `Bearer ${HF_API_KEY}` }, 
+                  timeout: 20000,
+                }
+                );
+            } catch (error) {
+                console.error('HF API error:', error.response?.data || error.message);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Failed to generate README. Please try again later.' }));
+                }
+
+
+            console.log('HF Response:', response.data);
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ content: response.data[0].generated_text }));
